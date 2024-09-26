@@ -1,0 +1,156 @@
+Sub SearchAll()
+    Dim wb As Workbook
+    Dim wsSource As Worksheet, wsSecondarySource As Worksheet, wsDestination As Worksheet
+    Dim sourceNames As Variant
+    Dim destNames As Variant
+    Dim monthYear As String
+    Dim targetCol As Integer
+    Dim searchRange As Range
+    Dim monthRange As Range
+    Dim found As Range
+    Dim destFoundCell As Range
+    Dim sourceRow As Long
+    Dim plannedCostCol As Integer
+    Dim cellValue As Variant
+    Dim i As Integer
+    Dim sourceFound As Boolean
+
+    ' Reference the current workbook
+    Set wb = ThisWorkbook
+    
+    ' Define source names and their paired destination sheets
+    sourceNames = Array("DR-088013.1221111", "DR-088013.1521114", "DR-088013.1521117", "DR-088013.1221114", _
+                        "DR-088013.1221115", "DR-088013.1221116", "DR-088013.1221117", "DR-088013.1221118", _
+                        "DR-088013.1521122", "DR-088013.1521123", "DR-088013.1221121", "DR-088013.1221122", _
+                        "DR-088013.1211118", "DR-088013.1521126", "DR-088013.1221125", "DR-088013.1221126", _
+                        "DR-088013.1521129", "DR-088013.1521130", "DR-088013.1221130", "DR-088013.1221131", _
+                        "DR-088013.1221132", "DR-088013.1211122", "DR-088013.1311111", "DR-088013.1221135", _
+                        "DR-088013.1521131")
+    destNames = Array("AHSS", "Damage Control", "DVSS", "Electric Plant", "FADC", "FCS", "Firewall", _
+                       "GEDMS", "HHD", "IBNS", "ICAS", "Logistics", "MCS", "MFM", "Program Management", _
+                       "Siscal", "Vent", "TMCS", "Logistics-SCS", "Energy", "EC", "RSC", "LBES", "GROWTH WORK", _
+                       "NAV")
+    
+    ' Prompt user for a date input
+    monthYear = InputBox("Please enter the date (e.g., 'Oct-23', 'Nov-23', 'Dec-23'):", "Input Date")
+    If monthYear = "" Then
+        MsgBox "No date provided. Operation cancelled."
+        Exit Sub
+    End If
+    
+    ' Define column for planned costs (Column D)
+    plannedCostCol = 4
+    
+    ' Loop through each source name and destination sheet pair
+    For i = LBound(sourceNames) To UBound(sourceNames)
+        Dim sourceName As String
+        Dim destName As String
+        
+        sourceName = sourceNames(i)
+        destName = destNames(i)
+        
+        ' Find the month-year column in the destination sheet
+        targetCol = 0
+        On Error Resume Next
+        Set wsDestination = wb.Sheets(destName)
+        On Error GoTo 0
+        If Not wsDestination Is Nothing Then
+            On Error Resume Next
+            Set monthRange = wsDestination.Range("C28:N28")
+            On Error GoTo 0
+            If Not monthRange Is Nothing Then
+                Set found = monthRange.Find(What:=monthYear, LookIn:=xlValues, LookAt:=xlWhole)
+                If Not found Is Nothing Then
+                    targetCol = found.Column
+                    Debug.Print "Month-Year '" & monthYear & "' found in column " & targetCol & " of sheet '" & destName & "'."
+                Else
+                    Debug.Print "Month-Year '" & monthYear & "' not found in sheet '" & destName & "'."
+                    GoTo NextPair
+                End If
+            Else
+                Debug.Print "Month-Year range not found in destination sheet '" & destName & "'."
+                GoTo NextPair
+            End If
+        Else
+            Debug.Print "Destination sheet '" & destName & "' not found."
+            GoTo NextPair
+        End If
+        
+        ' Set primary and secondary source sheets
+        On Error Resume Next
+        Set wsSource = wb.Sheets("Z2 53794 - SHIPBOARD INSTALL")
+        Set wsSecondarySource = wb.Sheets("Z2 All DDGM Backfit Pograms")
+        On Error GoTo 0
+        
+        If wsSource Is Nothing And wsSecondarySource Is Nothing Then
+            Debug.Print "Neither source sheet found. Operation cancelled."
+            GoTo NextPair
+        End If
+        
+        ' Search for the source name in the primary source sheet
+        sourceFound = False
+        If Not wsSource Is Nothing Then
+            On Error Resume Next
+            Set searchRange = wsSource.Range("A3:A759")
+            On Error GoTo 0
+            If Not searchRange Is Nothing Then
+                Set destFoundCell = searchRange.Find(What:=sourceName, LookIn:=xlValues, LookAt:=xlWhole)
+                If Not destFoundCell Is Nothing Then
+                    sourceRow = destFoundCell.row
+                    sourceFound = True
+                    Debug.Print "Source name '" & sourceName & "' found in primary source sheet at row " & sourceRow & "."
+                    
+                    ' Get the value from the source sheet (Column D)
+                    On Error Resume Next
+                    cellValue = wsSource.Cells(sourceRow, plannedCostCol).Value
+                    If Err.Number = 0 Then
+                        ' Copy the value to the destination sheet
+                        wsDestination.Cells(34, targetCol).Value = cellValue
+                        Debug.Print "Copied value '" & cellValue & "' to destination sheet '" & destName & "' at column " & targetCol & ", row 34."
+                    Else
+                        Debug.Print "Error reading value from primary source sheet at row " & sourceRow & ". Error: " & Err.Description
+                        Err.Clear
+                    End If
+                    On Error GoTo 0
+                End If
+            End If
+        End If
+        
+        ' If not found in primary, check secondary source sheet
+        If Not sourceFound And Not wsSecondarySource Is Nothing Then
+            On Error Resume Next
+            Set searchRange = wsSecondarySource.Range("A3:A759")
+            On Error GoTo 0
+            If Not searchRange Is Nothing Then
+                Set destFoundCell = searchRange.Find(What:=sourceName, LookIn:=xlValues, LookAt:=xlWhole)
+                If Not destFoundCell Is Nothing Then
+                    sourceRow = destFoundCell.row
+                    sourceFound = True
+                    Debug.Print "Source name '" & sourceName & "' found in secondary source sheet at row " & sourceRow & "."
+                    
+                    ' Get the value from the secondary source sheet (Column D)
+                    On Error Resume Next
+                    cellValue = wsSecondarySource.Cells(sourceRow, plannedCostCol).Value
+                    If Err.Number = 0 Then
+                        ' Copy the value to the destination sheet
+                        wsDestination.Cells(34, targetCol).Value = cellValue
+                        Debug.Print "Copied value '" & cellValue & "' to destination sheet '" & destName & "' at column " & targetCol & ", row 34."
+                    Else
+                        Debug.Print "Error reading value from secondary source sheet at row " & sourceRow & ". Error: " & Err.Description
+                        Err.Clear
+                    End If
+                    On Error GoTo 0
+                End If
+            End If
+        End If
+        
+        If Not sourceFound Then
+            Debug.Print "Source name '" & sourceName & "' not found in both source sheets."
+        End If
+        
+NextPair:
+    Next i
+    
+    ' Notify the user
+    MsgBox "Operation completed. Check the destination sheets for results."
+End Sub
