@@ -1,0 +1,134 @@
+Sub AddColumn()
+    Dim wb As Workbook
+    Dim wsSource As Worksheet, wsDestination As Worksheet
+    Dim sourceSheets As Variant, destSheets As Variant
+    Dim userDate As String, userChoice As String
+    Dim userNumber As Variant
+    Dim plannedCostHeader As String, expendedHeader As String
+    Dim targetCol As Variant, sourceCol As Integer, expendedCol As Integer
+    Dim searchRange As Range, cell As Range, destSheet As Variant
+    Dim monthYear As String, alreadyAdded As Boolean
+    Dim formattedDate As String
+
+    ' Reference the current workbook
+    Set wb = ThisWorkbook
+    
+    ' Define the destination and source sheets
+    destSheets = Array("Damage Control", "Digital Indicators", "DVSS", "Electric Plant", _
+                       "FADC", "FCS", "Firewall", "GEDMS", "HHD", "IBNS", "ICAS", "Logistics", _
+                       "MCS", "MFM", "Program Management", "SISCAL", "Vent", "TMCS", _
+                       "Logistics-SCS", "Energy", "EC", "RSC", "LBES", "Growth Work", "NAV", "AHSS")
+    sourceSheets = Array("Z2 53794 - SHIPBOARD INSTALL", "Z2 All DDGM Backfit Pograms")
+    
+    ' Prompt for date input
+    userDate = InputBox("Enter the date (e.g., 'Oct-23'):", "Input Date")
+    If userDate = "" Then Exit Sub
+    monthYear = Trim(userDate)
+
+    ' Get user choice for source sheet
+    userChoice = InputBox("Select source sheet: 'Shipboard' or 'DDGM':", "Select Source Sheet")
+    If LCase(Trim(userChoice)) = "shipboard" Then
+        Set wsSource = wb.Sheets(sourceSheets(0))
+    ElseIf LCase(Trim(userChoice)) = "ddgm" Then
+        Set wsSource = wb.Sheets(sourceSheets(1))
+    Else
+        MsgBox "Invalid choice. Operation cancelled."
+        Exit Sub
+    End If
+
+    ' Prompt for number to subtract
+    userNumber = InputBox("Enter a number to subtract from 'Planned Cost':", "Input Number")
+    If Not IsNumeric(userNumber) Then
+        MsgBox "Invalid number. Operation cancelled."
+        Exit Sub
+    End If
+    userNumber = CDbl(userNumber)
+    
+    plannedCostHeader = "Planned Cost"
+    expendedHeader = "Expended"
+
+    ' Process each destination sheet
+    For Each destSheet In destSheets
+        On Error Resume Next
+        Set wsDestination = wb.Sheets(destSheet)
+        On Error GoTo 0
+        
+        If Not wsDestination Is Nothing Then
+            ' Check for the formatted month-year in C28:N28
+            Dim foundMonth As Boolean
+            foundMonth = False
+            
+            For col = 3 To 14 ' Columns C to N
+                formattedDate = Format(wsDestination.Cells(28, col).Value, "mmm-yy")
+                If formattedDate = monthYear Then
+                    targetCol = col
+                    foundMonth = True
+                    Exit For
+                End If
+            Next col
+            
+            If Not foundMonth Then
+                Debug.Print monthYear & " not found in " & destSheet
+                GoTo NextSheet
+            End If
+            
+            ' Define the search range in the source sheet
+            Set searchRange = wsSource.Range("C1:H1")
+            If Not searchRange Is Nothing Then
+                ' Check for existing 'Expended' column
+                alreadyAdded = False
+                For Each cell In searchRange
+                    If Trim(cell.Value) = expendedHeader Then
+                        alreadyAdded = True
+                        Exit For
+                    End If
+                Next cell
+                
+                ' Add 'Expended' column if not present
+                If Not alreadyAdded Then
+                    For Each cell In searchRange
+                        If Trim(cell.Value) = plannedCostHeader Then
+                            sourceCol = cell.Column
+                            expendedCol = sourceCol + 1
+                            wsSource.Columns(expendedCol).Insert Shift:=xlToRight
+                            wsSource.Cells(1, expendedCol).Value = expendedHeader
+                            Exit For
+                        End If
+                    Next cell
+                End If
+                
+                ' Update values
+                For Each cell In searchRange
+                    If Trim(cell.Value) = plannedCostHeader Then
+                        sourceCol = cell.Column
+                        Dim plannedCostValue As Variant
+                        plannedCostValue = wsSource.Cells(3, sourceCol).Value
+                        
+                        ' Output the value for debugging
+                        Debug.Print "Planned Cost Value: " & plannedCostValue
+                        
+                        ' Check if plannedCostValue is numeric or an error
+                        If IsError(plannedCostValue) Then
+                            MsgBox "Error in Planned Cost in row 3. Value: " & plannedCostValue
+                        ElseIf IsNumeric(plannedCostValue) Then
+                            ' Ensure expendedCol is valid
+                            If expendedCol > 0 Then
+                                wsSource.Cells(3, expendedCol).Value = CDbl(plannedCostValue) - userNumber
+                                wsDestination.Cells(34, targetCol).Value = wsSource.Cells(3, expendedCol).Value
+                            Else
+                                MsgBox "Invalid Expended column index."
+                            End If
+                        Else
+                            MsgBox "Planned Cost is not numeric in row 3. Value: " & plannedCostValue
+                        End If
+                        Exit For
+                    End If
+                Next cell
+            End If
+        End If
+        
+NextSheet:
+    Next destSheet
+    
+    MsgBox "Operation completed successfully."
+End Sub
